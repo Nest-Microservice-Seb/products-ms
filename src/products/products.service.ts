@@ -1,9 +1,9 @@
-import { Injectable, NotFoundException, OnModuleInit } from '@nestjs/common';
+import { HttpStatus, Injectable, NotFoundException, OnModuleInit } from '@nestjs/common';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { PrismaClient } from '@prisma/client';
 import { PaginationDto } from 'src/common/dto/paginatio.dto';
-import { NotFoundError } from 'rxjs';
+import { RpcException } from '@nestjs/microservices';
 
 @Injectable()
 export class ProductsService extends PrismaClient implements OnModuleInit {
@@ -40,20 +40,34 @@ export class ProductsService extends PrismaClient implements OnModuleInit {
     }
   }
 
-  findOne(id: number) {
-    const product = this.product.findUnique({
+  async findOne(id: number) {
+    const product = await this.product.findFirst({
       where: { id, available: true },
     });
 
     if (!product) {
-      throw new NotFoundException(`Product with id ${id} not found`);
+      throw new RpcException({
+        message: `Product with id ${id} not found`,
+        status: HttpStatus.BAD_REQUEST,
+    });
     }
 
     return product;
   }
 
-  update(id: number, updateProductDto: UpdateProductDto) {
+  async update(id: number, updateProductDto: UpdateProductDto) {
     const { id: _, ...data } = updateProductDto;
+
+    const productExists = await this.product.findUnique({
+      where: { id },
+    });
+
+    if (!productExists) {
+      throw new RpcException({
+        message: `Product with id ${id} not found`,
+        status: HttpStatus.BAD_REQUEST,
+      });
+    }
 
     return this.product.update({
       where: { id },
@@ -62,12 +76,15 @@ export class ProductsService extends PrismaClient implements OnModuleInit {
   }
 
   async remove(id: number) {
-    const productExists = this.product.findUnique({
+    const productExists = await this.product.findUnique({
       where: { id },
     });
 
     if (!productExists) {
-      throw new NotFoundException(`Product with id ${id} not found`);
+      throw new RpcException({
+        message: `Product with id ${id} not found`,
+        status: HttpStatus.BAD_REQUEST,
+      });
     }
 
     return await this.product.update({
